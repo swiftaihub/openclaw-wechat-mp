@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 import httpx
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen32b-instruct-fast")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:32b-instruct-q4_K_M")
 
 
 def build_system_prompt(profile: str = "default") -> str:
