@@ -1,19 +1,36 @@
+import asyncio
+import logging
 import os
-from fastapi import APIRouter, Request, Response, HTTPException
-from wechatpy import parse_message, create_reply
-from wechatpy.utils import check_signature
-from app.wechat_token import get_access_token
+
 import httpx
+from fastapi import APIRouter, HTTPException, Request, Response
+from wechatpy import create_reply, parse_message
+from wechatpy.exceptions import InvalidSignatureException
+from wechatpy.utils import check_signature
 
 from app.openclaw_core import generate_reply
+from app.wechat_token import get_access_token
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+DEFAULT_REPLY_TIMEOUT_SECONDS = float(os.getenv("OPENCLAW_REPLY_TIMEOUT_SECONDS", "4.5"))
+
+
+def _validate_wechat_signature(signature: str, timestamp: str, nonce: str) -> None:
+    token = os.getenv("WECHAT_TOKEN", "").strip()
+    if not token:
+        raise HTTPException(status_code=500, detail="WECHAT_TOKEN not set")
+
+    try:
+        check_signature(token, signature, timestamp, nonce)
+    except InvalidSignatureException as exc:
+        raise HTTPException(status_code=403, detail="Invalid signature") from exc
+
 
 @router.post("/menu")
 async def create_menu():
     token = await get_access_token()
 
-    # 你可以按需改菜单
     menu = {
         "button": [
             {"type": "click", "name": "帮助", "key": "HELP"},
@@ -25,47 +42,43 @@ async def create_menu():
     params = {"access_token": token}
 
     async with httpx.AsyncClient(timeout=20) as client:
-        r = await client.post(url, params=params, json=menu)
-        r.raise_for_status()
-        data = r.json()
+        response = await client.post(url, params=params, json=menu)
+        response.raise_for_status()
+        data = response.json()
 
-    # errcode=0 代表成功
     return data
+
 
 @router.get("")
 async def wechat_verify(signature: str, timestamp: str, nonce: str, echostr: str):
-    """
-    微信服务器会发 GET 请求校验 URL：
-    校验 signature 成功后，必须原样返回 echostr 才算接入成功。:contentReference[oaicite:3]{index=3}
-    """
-    if not WECHAT_TOKEN:
-        raise HTTPException(status_code=500, detail="WECHAT_TOKEN not set")
+    _validate_wechat_signature(signature, timestamp, nonce)
+    return Response(content=echostr, media_type="text/plain")
 
-    if check_signature(WECHAT_TOKEN, signature, timestamp, nonce):
-        return Response(content=echostr, media_type="text/plain")
-    raise HTTPException(status_code=403, detail="Invalid signature")
 
 @router.post("")
 async def wechat_message(request: Request, signature: str, timestamp: str, nonce: str):
-    """
-    明文模式：POST body 是 XML。
-    这里先实现：收到文本 -> 交给 OpenClaw -> 回复文本
-    """
-    if not check_signature(WECHAT_TOKEN, signature, timestamp, nonce):
-        raise HTTPException(status_code=403, detail="Invalid signature")
+    _validate_wechat_signature(signature, timestamp, nonce)
 
     body = await request.body()
     msg = parse_message(body)
 
-    # 只处理文本消息，其他类型先简单返回 "success"（微信要求快速响应）
     if msg.type != "text":
         return Response(content="success", media_type="text/plain")
 
     user_text = msg.content.strip()
-    from_user = msg.source  # 用户 openid
-    to_user = msg.target    # 公众号原始 id
+    from_user = msg.source
 
-    reply_text = await generate_reply(user_id=from_user, text=user_text)
+    try:
+        reply_text = await asyncio.wait_for(
+            generate_reply(user_id=from_user, text=user_text),
+            timeout=DEFAULT_REPLY_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("OpenClaw reply timeout")
+        reply_text = "我在处理中，稍后再试一次会更稳。"
+    except Exception as exc:
+        logger.warning("Failed to generate OpenClaw reply: %s", exc)
+        reply_text = "服务暂时繁忙，请稍后再试。"
 
     reply = create_reply(reply_text, msg)
     return Response(content=reply.render(), media_type="application/xml")
