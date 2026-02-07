@@ -44,7 +44,8 @@ Request flow:
 
 - Docker Desktop (or Docker Engine + Compose plugin)
 - A WeChat Official Account with server callback configuration access
-- `ngrok` account and CLI (for exposing local webhook to WeChat)
+- Cloudflare account
+- `cloudflared` CLI (for exposing local webhook to WeChat)
 
 ## Environment Variables
 
@@ -123,41 +124,49 @@ If you change `OLLAMA_MODEL` in `.env`, recreate app container:
 docker compose up -d --force-recreate openclaw
 ```
 
-## Where to Use ngrok (Important)
+## Where to Use Cloudflare Tunnel (Important)
 
-Use `ngrok` **after** local containers are healthy and before configuring WeChat callback URL.
+Use Cloudflare Tunnel **after** local containers are healthy and before configuring WeChat callback URL.
 
 Recommended order:
 1. `docker compose up -d --build`
 2. Confirm `http://localhost:8787/health` works
-3. Start `ngrok` for port `8787`
-4. Copy ngrok HTTPS URL into WeChat server config
+3. Start `cloudflared` for `http://localhost:8787`
+4. Copy Cloudflare Tunnel HTTPS URL into WeChat server config
 
-### Start ngrok
+### Install cloudflared on Windows Command Prompt
+
+```bat
+winget install --id Cloudflare.cloudflared -e
+```
+
+If `winget` is unavailable, download the Windows binary from Cloudflare and add it to your `PATH`.
+
+### Start Cloudflare Tunnel
 
 ```bash
-ngrok http 8787
+cloudflared tunnel --url http://localhost:8787
 ```
 
 You will get an HTTPS forwarding URL like:
 
 ```text
-https://abcd-1234.ngrok-free.app
+https://random-subdomain.trycloudflare.com
 ```
 
 WeChat callback URL should be:
 
 ```text
-https://abcd-1234.ngrok-free.app/wechat
+https://random-subdomain.trycloudflare.com/wechat
 ```
 
-Keep ngrok running during WeChat callback verification and testing.
+Keep the tunnel running during WeChat callback verification and testing.
 
 ## Configure WeChat Official Account
 
 In WeChat platform server configuration:
 
-- URL: `https://<your-ngrok-domain>/wechat`
+- URL: `https://<your-cloudflare-domain>/wechat`
 - Token: value of `WECHAT_TOKEN`
 - EncodingAESKey: value of `EncodingAESKey`
 - Message encryption mode: use plain text mode for this codebase
@@ -185,7 +194,7 @@ curl -X POST http://localhost:8787/wechat/menu
 
 - `WECHAT_TOKEN` in `.env` does not match WeChat platform token
 - callback URL is not exactly `/wechat`
-- ngrok URL changed, but WeChat config still points to old URL
+- tunnel URL changed, but WeChat config still points to old URL
 
 ### `500 WECHAT_TOKEN not set`
 
@@ -229,4 +238,3 @@ To also remove Ollama model volume:
 ```bash
 docker compose down -v
 ```
-
