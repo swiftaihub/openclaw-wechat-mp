@@ -76,6 +76,20 @@ Notes:
 ```bash
 docker compose up -d --build
 ```
+Container Environment variables:
+WECHAT_TOKEN
+WECHAT_APPID
+WECHAT_SECRET
+EncodingAESKey
+OLLAMA_BASE_URL=http://host.docker.internal:11434
+OLLAMA_MODEL
+OPENCLAW_REPLY_TIMEOUT_SECONDS
+
+# 你的服务端口
+PORT=8787
+
+# 回复超时时间，单位秒
+OPENCLAW_REPLY_TIMEOUT_SECONDS=30
 
 ### 2. Check containers
 
