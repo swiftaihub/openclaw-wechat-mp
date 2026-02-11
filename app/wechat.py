@@ -8,7 +8,7 @@ from wechatpy import create_reply, parse_message
 from wechatpy.exceptions import InvalidSignatureException
 from wechatpy.utils import check_signature
 
-from app.openclaw_core import generate_reply
+from app.llm_core import generate_reply
 from app.wechat_token import get_access_token
 
 router = APIRouter()

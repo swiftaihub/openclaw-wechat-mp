@@ -5,7 +5,7 @@ load_dotenv()
 
 from app.wechat import router as wechat_router
 
-app = FastAPI(title="OpenClaw WeChat MP Gateway")
+app = FastAPI(title="Ollama WeChat MP Gateway")
 
 app.include_router(wechat_router, prefix="/wechat")
 

@@ -1,12 +1,12 @@
 version: "3.9"
 
 services:
-  openclaw:
+  wechat-mp:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: openclaw
-    image: openclawwechatmp:latest
+    container_name: wechat-mp
+    image: wechat-mp:latest
     env_file:
       - .env
     ports:
@@ -18,7 +18,7 @@ services:
     container_name: cloudflared
     command: tunnel run openclaw-wechat-mp
     depends_on:
-      - openclaw
+      - wechat-mp
     volumes:
       - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
       - ./cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro

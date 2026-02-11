@@ -1,23 +1,22 @@
 # OpenClaw WeChat MP Gateway
 
-FastAPI gateway that connects a WeChat Official Account (gong zhong hao) with OpenClaw running on Ollama.
+FastAPI gateway that connects a WeChat Official Account (gong zhong hao) with LLM running on Ollama.
 
 This repo provides:
 - WeChat callback verification (`GET /wechat`)
 - WeChat message handling (`POST /wechat`)
 - LLM reply generation via Ollama
-- Docker Compose deployment for both `openclaw` app and `ollama` service
+- Docker Compose deployment for both `wechat-mp` app and `cloudflared` service
 
 ## Architecture
 
-- `openclaw` container:
+- `wechat-mp` container:
   - FastAPI app
   - receives WeChat callbacks
   - validates WeChat signature
   - calls Ollama chat API
-- `ollama` container:
-  - local LLM runtime
-  - model storage in Docker volume `ollama_data`
+- `cloudflared` container:
+  - publish tunnel and running in a container for exposing local webhook to WeChat
 
 Request flow:
 1. WeChat sends message callback to `/wechat`.
@@ -33,7 +32,7 @@ Request flow:
 |   |-- main.py
 |   |-- wechat.py
 |   |-- wechat_token.py
-|   |-- openclaw_core.py
+|   |-- llm_core.py
 |   `-- ollama_client.py
 |-- cloudflared/
 |   |-- config.yml
@@ -64,7 +63,7 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 OLLAMA_MODEL=qwen2.5:7b-instruct
 
 PORT=8787
-OPENCLAW_REPLY_TIMEOUT_SECONDS=4.5
+OPENCLAW_REPLY_TIMEOUT_SECONDS=30
 ```
 
 Notes:
