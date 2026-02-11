@@ -35,6 +35,9 @@ Request flow:
 |   |-- wechat_token.py
 |   |-- openclaw_core.py
 |   `-- ollama_client.py
+|-- cloudflared/
+|   |-- config.yml
+|   |-- credentials.json
 |-- docker-compose.yml
 |-- Dockerfile
 `-- requirements.txt
@@ -57,7 +60,7 @@ WECHAT_APPID=replace_with_your_appid
 WECHAT_SECRET=replace_with_your_secret
 EncodingAESKey=replace_with_your_encoding_aes_key
 
-OLLAMA_BASE_URL=http://ollama:11434
+OLLAMA_BASE_URL=http://host.docker.internal:11434
 OLLAMA_MODEL=qwen2.5:7b-instruct
 
 PORT=8787
@@ -76,20 +79,6 @@ Notes:
 ```bash
 docker compose up -d --build
 ```
-Container Environment variables:
-WECHAT_TOKEN
-WECHAT_APPID
-WECHAT_SECRET
-EncodingAESKey
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL
-OPENCLAW_REPLY_TIMEOUT_SECONDS
-
-# 你的服务端口
-PORT=8787
-
-# 回复超时时间，单位秒
-OPENCLAW_REPLY_TIMEOUT_SECONDS=30
 
 ### 2. Check containers
 
@@ -117,7 +106,7 @@ After containers are up, install at least one model in the `ollama` container.
 ### Pull a model
 
 ```bash
-docker compose exec ollama ollama pull qwen2.5:7b-instruct
+docker compose exec ollama ollama pull qwen2.5:32b-instruct-q4_K_M
 ```
 
 ### List models
@@ -175,6 +164,25 @@ https://random-subdomain.trycloudflare.com/wechat
 ```
 
 Keep the tunnel running during WeChat callback verification and testing.
+
+## Tunnel for production with owned domain
+- register your cloudflared account at https://dash.cloudflare.com
+- Add a exisitng site -> rename Nameserver
+```bash
+cloudflared login
+cloudflared tunnel create your-tunnel-name
+cloudflared tunnel route dns your-tunnel-name wx.yourdomain.com
+cloudflared tunnel run your-tunnel-name
+```
+- To update cloudflared:
+```bash
+winget upgrade Cloudflare.cloudflared
+```
+
+## Finding your own cloudflared credentials.json:
+- C:\Users\<your-username>\.cloudflared\<uuid>.json
+- Add this file into /cloudflared/credentials.json
+- change your own dns in config.yml
 
 ## Configure WeChat Official Account
 
@@ -252,3 +260,9 @@ To also remove Ollama model volume:
 ```bash
 docker compose down -v
 ```
+
+## Start the server:
+Powershell run startup.ps1
+
+## Stop the server:
+Powershell run shutdown.ps1
