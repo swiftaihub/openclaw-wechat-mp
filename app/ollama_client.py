@@ -73,8 +73,10 @@ async def ollama_chat(
     instructions: Optional[str] = None,
 ) -> str:
     """
-    最终调用：内部组装 system/user，然后按你给的 payload 发给 Ollama。
+    Final call to Ollama using /api/generate
+    Compatible with all stable Ollama versions.
     """
+
     system = build_system_prompt(system_profile)
     user = build_user_prompt(
         user_text,
@@ -83,19 +85,20 @@ async def ollama_chat(
         instructions=instructions,
     )
 
+    # Convert system + user into single prompt (generate API style)
+    final_prompt = f"{system}\n\n{user}"
+
     payload = {
         "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        "prompt": final_prompt,
         "stream": False,
     }
 
-    url = f"{OLLAMA_BASE_URL}/api/chat"
-    async with httpx.AsyncClient(timeout=60) as client:
+    url = f"{OLLAMA_BASE_URL}/api/generate"
+
+    async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(url, json=payload)
         r.raise_for_status()
         data = r.json()
 
-    return (data.get("message") or {}).get("content", "").strip() or "（我刚刚没生成出有效回复，再试一次？）"
+    return (data.get("response") or "").strip() or "（我刚刚没生成出有效回复，再试一次？）"
