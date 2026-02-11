@@ -77,19 +77,14 @@ Notes:
 docker compose up -d --build
 ```
 Container Environment variables:
-WECHAT_TOKEN
-WECHAT_APPID
-WECHAT_SECRET
-EncodingAESKey
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-OLLAMA_MODEL
-OPENCLAW_REPLY_TIMEOUT_SECONDS
-
-# 你的服务端口
-PORT=8787
-
-# 回复超时时间，单位秒
-OPENCLAW_REPLY_TIMEOUT_SECONDS=30
+- WECHAT_TOKEN
+- WECHAT_APPID
+- WECHAT_SECRET
+- EncodingAESKey
+- OLLAMA_BASE_URL=http://host.docker.internal:11434
+- OLLAMA_MODEL
+- PORT=8787
+- OPENCLAW_REPLY_TIMEOUT_SECONDS=30
 
 ### 2. Check containers
 
@@ -175,6 +170,14 @@ https://random-subdomain.trycloudflare.com/wechat
 ```
 
 Keep the tunnel running during WeChat callback verification and testing.
+
+## Tunnel for production
+```bash
+cloudflared tunnel run openclaw-wechat-mp
+```
+
+## Finding your own cloudflared credentials.json:
+C:\Users\<your-username>\.cloudflared\<uuid>.json
 
 ## Configure WeChat Official Account
 

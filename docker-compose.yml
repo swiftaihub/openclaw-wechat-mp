@@ -1,25 +1,32 @@
 services:
   openclaw:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: openclawwechatmp:latest
+    container_name: openclaw
     env_file:
       - .env
     ports:
-      - "8787:8787"
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - "127.0.0.1:8787:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    command: tunnel run openclaw-wechat-mp
     depends_on:
-      - ollama
-    restart: unless-stopped
-
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
+      - openclaw
     volumes:
-      - ollama_data:/root/.ollama
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ./cloudflared/credentials.json:/etc/cloudflared/credentials.json:ro
     restart: unless-stopped
-
-volumes:
-  ollama_data:
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
