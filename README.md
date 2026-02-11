@@ -249,18 +249,6 @@ docker compose config
 - Rotate WeChat secrets if they are ever exposed.
 - In production, restrict exposed ports and add authentication for admin endpoints like `/wechat/menu`.
 
-## Stop Services
-
-```bash
-docker compose down
-```
-
-To also remove Ollama model volume:
-
-```bash
-docker compose down -v
-```
-
 ## Start the server:
 Powershell run startup.ps1
 
