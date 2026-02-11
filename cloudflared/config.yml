@@ -1,5 +1,5 @@
 tunnel: openclaw-wechat-mp
-credentials-file: D:\Github\app\openclaw-wechat-mp\openclaw-wechat-mp\cloudflared\credentials.json
+credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
   - hostname: wx.swiftaihub.com
