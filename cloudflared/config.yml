@@ -3,5 +3,5 @@ credentials-file: /etc/cloudflared/credentials.json
 
 ingress:
   - hostname: wx.swiftaihub.com
-    service: http://openclaw:8787
+    service: http://wechat-mp:8787
   - service: http_status:404
