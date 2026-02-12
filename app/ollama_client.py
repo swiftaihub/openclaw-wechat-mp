@@ -1,104 +1,69 @@
-# app/ollama_client.py
+import logging
 import os
-from typing import Optional, Dict, Any, List
+from typing import Any
+
 import httpx
+
+logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:32b-instruct-q4_K_M")
+OPENCLAW_REPLY_TIMEOUT_SECONDS = float(os.getenv("OPENCLAW_REPLY_TIMEOUT_SECONDS", "5"))
+OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "180"))
+OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.2"))
+OLLAMA_TOP_P = float(os.getenv("OLLAMA_TOP_P", "0.9"))
+OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
+OLLAMA_WARMUP_ON_STARTUP = os.getenv("OLLAMA_WARMUP_ON_STARTUP", "1").strip() not in {
+    "0",
+    "false",
+    "False",
+}
+OLLAMA_WARMUP_TIMEOUT_SECONDS = float(os.getenv("OLLAMA_WARMUP_TIMEOUT_SECONDS", "15"))
 
 
-def build_system_prompt(profile: str = "default") -> str:
-    """
-    系统提示词：尽量稳定、少变动，便于复用和评估效果。
-    profile 可以让你未来扩展不同“人格/模式”。
-    """
-    if profile == "default":
-        return (
-            "你是 OpenClaw，一个高效、可靠、注重安全的个人助手。\n"
-            "要求：\n"
-            "1) 回答要简洁、可执行。\n"
-            "2) 信息不足时，先给最可能的默认方案，再列出最多2个需要澄清的问题。\n"
-            "3) 不要编造事实；不确定就说明不确定。\n"
-        )
-    if profile == "wechat":
-        return (
-            "你是 OpenClaw，在微信公众号中回复用户。\n"
-            "要求：\n"
-            "1) 回复要短，适合手机阅读（尽量 3-8 行）。\n"
-            "2) 用中文回答，除非用户明确要求英文。\n"
-            "3) 给步骤/清单优先。\n"
-        )
-    # fallback
-    return "你是一个乐于助人的助手。"
-
-
-def build_user_prompt(
-    user_text: str,
-    *,
-    user_id: Optional[str] = None,
-    context: Optional[Dict[str, Any]] = None,
-    instructions: Optional[str] = None,
-) -> str:
-    """
-    用户提示词：把用户原话放在最醒目的位置，其余上下文用“结构化块”包起来。
-    这样模型更稳定，也方便你后续加记忆/RAG/工具状态。
-    """
-    context = context or {}
-
-    header_lines = []
-    if user_id:
-        header_lines.append(f"UserID: {user_id}")
-    for k, v in context.items():
-        header_lines.append(f"{k}: {v}")
-
-    header = "\n".join(header_lines).strip()
-    extra = (instructions or "").strip()
-
-    parts: List[str] = []
-    if header:
-        parts.append("【上下文】\n" + header)
-    if extra:
-        parts.append("【额外要求】\n" + extra)
-    parts.append("【用户消息】\n" + user_text.strip())
-
-    return "\n\n".join(parts).strip()
-
-
-async def ollama_chat(
-    *,
-    user_text: str,
-    system_profile: str = "wechat",
-    user_id: Optional[str] = None,
-    context: Optional[Dict[str, Any]] = None,
-    instructions: Optional[str] = None,
-) -> str:
-    """
-    Final call to Ollama using /api/generate
-    Compatible with all stable Ollama versions.
-    """
-
-    system = build_system_prompt(system_profile)
-    user = build_user_prompt(
-        user_text,
-        user_id=user_id,
-        context=context,
-        instructions=instructions,
-    )
-
-    # Convert system + user into single prompt (generate API style)
-    final_prompt = f"{system}\n\n{user}"
-
-    payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": final_prompt,
+def _build_payload(model: str, prompt: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "model": model,
+        "prompt": prompt,
         "stream": False,
+        "options": {
+            "num_predict": OLLAMA_NUM_PREDICT,
+            "temperature": OLLAMA_TEMPERATURE,
+            "top_p": OLLAMA_TOP_P,
+        },
     }
+    if OLLAMA_KEEP_ALIVE:
+        payload["keep_alive"] = OLLAMA_KEEP_ALIVE
+    return payload
 
+
+async def ollama_chat(*, system_prompt: str, user_prompt: str) -> str:
+    final_prompt = f"{system_prompt.strip()}\n\n{user_prompt.strip()}".strip()
+    active_model = OLLAMA_MODEL.strip()
+    payload = _build_payload(active_model, final_prompt)
     url = f"{OLLAMA_BASE_URL}/api/generate"
 
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(url, json=payload)
-        r.raise_for_status()
-        data = r.json()
+    async with httpx.AsyncClient(timeout=OPENCLAW_REPLY_TIMEOUT_SECONDS) as client:
+        response = await client.post(url, json=payload)
+        response.raise_for_status()
+        data = response.json()
 
-    return (data.get("response") or "").strip() or "（我刚刚没生成出有效回复，再试一次？）"
+    return (data.get("response") or "").strip() or "I could not generate a valid reply."
+
+
+async def warmup_ollama(model: str | None = None) -> None:
+    if not OLLAMA_WARMUP_ON_STARTUP:
+        return
+
+    active_model = (model or OLLAMA_MODEL).strip()
+    payload = _build_payload(active_model, "warmup")
+    payload["options"]["num_predict"] = 8
+    url = f"{OLLAMA_BASE_URL}/api/generate"
+
+    try:
+        async with httpx.AsyncClient(timeout=OLLAMA_WARMUP_TIMEOUT_SECONDS) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            logger.info("Ollama warmup succeeded for model: %s", active_model)
+    except Exception as exc:
+        logger.warning("Ollama warmup failed for model %s: %s", active_model, exc)
