@@ -14,7 +14,7 @@ This repo provides:
   - FastAPI app
   - receives WeChat callbacks
   - validates WeChat signature
-  - calls Ollama chat API
+  - calls Ollama and returns passive sync reply
 - `cloudflared` container:
   - publish tunnel and running in a container for exposing local webhook to WeChat
 
@@ -33,10 +33,19 @@ Request flow:
 |   |-- wechat.py
 |   |-- wechat_token.py
 |   |-- llm_core.py
-|   `-- ollama_client.py
+|   |-- ollama_client.py
+|   |-- prompt_runtime.py
+|   `-- guardrail.py
+|-- config/
+|   `-- prompt.example.yaml
 |-- cloudflared/
 |   |-- config.yml
 |   |-- credentials.json
+|-- docs/
+|   `-- prompt-guardrail-security.md
+|-- tests/
+|   |-- test_prompt_runtime.py
+|   `-- test_guardrail.py
 |-- docker-compose.yml
 |-- Dockerfile
 `-- requirements.txt
@@ -61,9 +70,21 @@ EncodingAESKey=replace_with_your_encoding_aes_key
 
 OLLAMA_BASE_URL=http://host.docker.internal:11434
 OLLAMA_MODEL=qwen2.5:7b-instruct
+OLLAMA_NUM_PREDICT=180
+OLLAMA_TEMPERATURE=0.2
+OLLAMA_TOP_P=0.9
+OLLAMA_KEEP_ALIVE=30m
+OLLAMA_WARMUP_ON_STARTUP=1
+OLLAMA_WARMUP_TIMEOUT_SECONDS=15
+
+PROMPT_PROFILE=wechat
+PROMPT_CONFIG_PATH=config/prompt.private.yaml
+PROMPT_EXAMPLE_PATH=config/prompt.example.yaml
 
 PORT=8787
-OPENCLAW_REPLY_TIMEOUT_SECONDS=30
+OPENCLAW_REPLY_TIMEOUT_SECONDS=5
+WECHAT_SYNC_TIMEOUT_TEXT=回复生成超时，请稍后再试。
+WECHAT_SYNC_ERROR_TEXT=服务暂时繁忙，请稍后再试。
 ```
 
 Notes:
@@ -71,7 +92,58 @@ Notes:
 - This code currently handles plain text callback mode (not encrypted callback decryption).
 - If your current model name in `.env` does not exist in Ollama, pull an available model and update `OLLAMA_MODEL`.
 
+## Prompt and Guardrail Separation
+
+This project supports runtime-loaded prompt and guardrail policies:
+
+- Private config file: `config/prompt.private.yaml` (git ignored)
+- Public template file: `config/prompt.example.yaml` (safe to commit)
+- Runtime config loader: `app/prompt_runtime.py`
+- Guardrail pipeline: `app/guardrail.py`
+
+Setup:
+
+```bash
+cp config/prompt.example.yaml config/prompt.private.yaml
+```
+
+Fill only your local `config/prompt.private.yaml` with private prompt content and policy patterns.
+Do not commit this file.
+
+See `docs/prompt-guardrail-security.md` for architecture, lifecycle, and CI/CD protections.
+
+## Run Tests
+
+Run all tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+Run Guardrail tests only:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_guardrail -v
+```
+
+Run prompt runtime tests only:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_prompt_runtime -v
+```
+
+Run local private prompt config test (`config/prompt.private.yaml`):
+
+```powershell
+$env:RUN_PRIVATE_PROMPT_TEST="1"
+.\.venv\Scripts\python.exe -m unittest tests.test_prompt_runtime.PromptRuntimeTests.test_load_runtime_from_local_private_config -v
+Remove-Item Env:RUN_PRIVATE_PROMPT_TEST
+```
+
 ## Deploy with Docker
+
+`docker-compose.yml` mounts `./config` into `/srv/config` as read-only, so local updates to
+`prompt.private.yaml` can be applied without rebuilding the image.
 
 ### 1. Build and start services
 
@@ -231,7 +303,13 @@ docker compose up -d --force-recreate openclaw
 - Ollama container is not ready
 - model not pulled
 - `OLLAMA_MODEL` name does not exist
-- choose a smaller model or increase timeout with `OPENCLAW_REPLY_TIMEOUT_SECONDS`
+- reply exceeded WeChat passive window, reduce latency with:
+  - smaller `OLLAMA_MODEL`
+  - lower `OLLAMA_NUM_PREDICT` (e.g. `120-180`)
+  - keep model loaded with `OLLAMA_KEEP_ALIVE=30m`
+  - ensure warmup enabled with `OLLAMA_WARMUP_ON_STARTUP=1`
+  - for large models, increase warmup timeout with `OLLAMA_WARMUP_TIMEOUT_SECONDS` (e.g. `15`)
+  - tune `OPENCLAW_REPLY_TIMEOUT_SECONDS`
 
 ### Docker build/start issues
 
@@ -245,6 +323,8 @@ docker compose config
 ## Security Notes
 
 - Do not commit `.env` to git.
+- Do not commit `config/prompt.private.yaml` to git.
+- `.dockerignore` excludes private prompt files from Docker build context.
 - Rotate WeChat secrets if they are ever exposed.
 - In production, restrict exposed ports and add authentication for admin endpoints like `/wechat/menu`.
 
