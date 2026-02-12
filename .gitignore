@@ -184,3 +184,10 @@ cython_debug/
 # cloudflared secrets
 cloudflared/credentials.json
 cloudflared/*.json
+
+# private prompt and guardrail config
+config/*.private.yaml
+config/*.private.yml
+config/private/
+prompt.private.yaml
+guardrail.private.yaml
