@@ -1,0 +1,34 @@
+version: 1
+default_profile: wechat
+
+profiles:
+  wechat:
+    system_prompt: |
+      <SYSTEM_PROMPT_PLACEHOLDER>
+    user_prompt_template: |
+      [Context]
+      user_id: {user_id}
+      {context_block}
+
+      [User Message]
+      {user_text}
+
+  default:
+    system_prompt: |
+      <DEFAULT_SYSTEM_PROMPT_PLACEHOLDER>
+    user_prompt_template: |
+      {user_text}
+
+guardrail:
+  enabled: true
+  max_output_chars: 900
+  blocked_input_patterns:
+    - "(?i)<INPUT_BLOCK_PATTERN>"
+  blocked_output_patterns:
+    - "(?i)<OUTPUT_BLOCK_PATTERN>"
+  redaction_patterns:
+    - "(?i)<REDACT_PATTERN>"
+  redaction_replacement: "[REDACTED]"
+  blocked_response: "<BLOCKED_RESPONSE_PLACEHOLDER>"
+  fallback_response: "<FALLBACK_RESPONSE_PLACEHOLDER>"
+  trim_suffix: "..."

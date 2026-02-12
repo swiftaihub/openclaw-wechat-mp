@@ -13,7 +13,17 @@ from app.wechat_token import get_access_token
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-DEFAULT_REPLY_TIMEOUT_SECONDS = float(os.getenv("OPENCLAW_REPLY_TIMEOUT_SECONDS", "4.5"))
+DEFAULT_REPLY_TIMEOUT_SECONDS = float(os.getenv("OPENCLAW_REPLY_TIMEOUT_SECONDS", "5"))
+
+WECHAT_SYNC_TIMEOUT_TEXT = os.getenv(
+    "WECHAT_SYNC_TIMEOUT_TEXT",
+    "\u56de\u590d\u751f\u6210\u8d85\u65f6\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002",
+)
+
+WECHAT_SYNC_ERROR_TEXT = os.getenv(
+    "WECHAT_SYNC_ERROR_TEXT",
+    "\u670d\u52a1\u6682\u65f6\u7e41\u5fd9\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002",
+)
 
 
 def _validate_wechat_signature(signature: str, timestamp: str, nonce: str) -> None:
@@ -33,8 +43,8 @@ async def create_menu():
 
     menu = {
         "button": [
-            {"type": "click", "name": "帮助", "key": "HELP"},
-            {"type": "click", "name": "设置", "key": "SETTINGS"},
+            {"type": "click", "name": "\u5e2e\u52a9", "key": "HELP"},
+            {"type": "click", "name": "\u8bbe\u7f6e", "key": "SETTINGS"},
         ]
     }
 
@@ -74,11 +84,11 @@ async def wechat_message(request: Request, signature: str, timestamp: str, nonce
             timeout=DEFAULT_REPLY_TIMEOUT_SECONDS,
         )
     except asyncio.TimeoutError:
-        logger.warning("OpenClaw reply timeout")
-        reply_text = "我在处理中，稍后再试一次会更稳。"
+        logger.warning("OpenClaw sync reply timeout for user %s", from_user)
+        reply_text = WECHAT_SYNC_TIMEOUT_TEXT
     except Exception as exc:
-        logger.warning("Failed to generate OpenClaw reply: %s", exc)
-        reply_text = "服务暂时繁忙，请稍后再试。"
+        logger.warning("Failed to generate OpenClaw sync reply for user %s: %s", from_user, exc)
+        reply_text = WECHAT_SYNC_ERROR_TEXT
 
     reply = create_reply(reply_text, msg)
     return Response(content=reply.render(), media_type="application/xml")

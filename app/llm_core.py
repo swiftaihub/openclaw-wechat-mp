@@ -1,16 +1,34 @@
+import os
+from functools import lru_cache
+
+from app.guardrail import GuardrailEngine
 from app.ollama_client import ollama_chat
+from app.prompt_runtime import get_prompt_runtime
+
+PROMPT_PROFILE = os.getenv("PROMPT_PROFILE", "wechat")
 
 
-SYSTEM_PROMPT = """你是聪明的AI，一个高效、可靠的个人助手。
-回答要简洁、可执行；如果信息不足，先给出最可能的默认方案，再列出需要用户补充的1-2个问题。"""
+@lru_cache(maxsize=1)
+def _get_guardrail_engine() -> GuardrailEngine:
+    runtime = get_prompt_runtime()
+    return GuardrailEngine(runtime.guardrail_settings)
+
 
 async def generate_reply(user_id: str, text: str) -> str:
-    return await ollama_chat(
-        user_text=text,
-        system_profile="wechat",
+    runtime = get_prompt_runtime()
+    guardrail = _get_guardrail_engine()
+
+    input_result = guardrail.check_input(text)
+    if input_result.blocked:
+        return input_result.text
+
+    system_prompt = runtime.system_prompt(PROMPT_PROFILE)
+    user_prompt = runtime.render_user_prompt(
+        profile=PROMPT_PROFILE,
+        user_text=input_result.text,
         user_id=user_id,
-        context={
-            "channel": "wechat_mp",
-        },
-        instructions=SYSTEM_PROMPT,
+        context={"channel": "wechat_mp"},
     )
+
+    raw_output = await ollama_chat(system_prompt=system_prompt, user_prompt=user_prompt)
+    return guardrail.sanitize_output(raw_output)
